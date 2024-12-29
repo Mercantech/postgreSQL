@@ -1,0 +1,10 @@
+@page "/exercise/{id}"
+
+<h1>Exercise @Id</h1>
+<SQLInput />
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = "1";
+}
+

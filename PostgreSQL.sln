@@ -7,9 +7,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Domain Models", "Domain Mod
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Blazor", "Blazor\Blazor.csproj", "{BE16C6D0-1577-4B7B-B850-3424369BFF71}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "H1-Projekt.AppHost", "H1-Projekt.AppHost\H1-Projekt.AppHost.csproj", "{D47DD402-B5DD-41D0-8A0E-762F57F07635}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PostgreSQL", "H1-Projekt.AppHost\PostgreSQL.csproj", "{D47DD402-B5DD-41D0-8A0E-762F57F07635}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "H1-Projekt.ServiceDefaults", "H1-Projekt.ServiceDefaults\H1-Projekt.ServiceDefaults.csproj", "{A5CA2019-EB37-46C6-84DA-D46A6BFF909B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PostgreSQL.ServiceDefaults", "H1-Projekt.ServiceDefaults\PostgreSQL.ServiceDefaults.csproj", "{A5CA2019-EB37-46C6-84DA-D46A6BFF909B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

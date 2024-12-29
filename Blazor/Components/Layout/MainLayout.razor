@@ -92,6 +92,7 @@
 
         if (!isAuthenticated)
         {
+            items.Add(new NavItem { Href = "/exercise/1", IconName = IconName.Database, Text = "SQL Øvelse 1" });
             items.Add(new NavItem { Href = "/login", IconName = IconName.PersonFill, Text = "Login" });
         }
         else

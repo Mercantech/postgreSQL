@@ -1,0 +1,78 @@
+@using BlazorMonaco
+@using BlazorMonaco.Editor
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <StandaloneCodeEditor @ref="editor"
+                             Id="sql-editor"
+                             ConstructionOptions="EditorConstructionOptions"
+                             CssClass="editor-class" />
+    </div>
+    <div class="card-footer">
+        <button class="btn btn-primary" @onclick="RunCode" disabled="@isRunning">
+            @if (isRunning)
+            {
+                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                <span>Kører...</span>
+            }
+            else
+            {
+                <i class="bi bi-play-fill"></i>
+                <span>Kør SQL</span>
+            }
+        </button>
+    </div>
+</div>
+
+<style>
+    .editor-class {
+        height: 300px;
+        width: 100%;
+    }
+</style>
+
+@code {
+    private StandaloneCodeEditor editor;
+    private bool isRunning = false;
+
+    [Parameter]
+    public EventCallback<string> OnCodeRun { get; set; }
+
+    private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            AutomaticLayout = true,
+            Language = "sql",
+            Theme = "vs-dark",
+            LineNumbers = "on",
+            Folding = true,
+            Value = "SELECT * FROM users;" 
+        };
+    }
+
+    private async Task RunCode()
+    {
+        isRunning = true;
+        try
+        {
+            string sql = await editor.GetValue();
+            await OnCodeRun.InvokeAsync(sql);
+        }
+        finally
+        {
+            isRunning = false;
+            StateHasChanged();
+        }
+    }
+
+    public async Task<string> GetSQL()
+    {
+        return await editor.GetValue();
+    }
+
+    public async Task SetSQL(string sql)
+    {
+        await editor.SetValue(sql);
+    }
+}
