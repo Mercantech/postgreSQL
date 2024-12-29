@@ -1,0 +1,215 @@
+@page "/dev/jwt"
+@using System.IdentityModel.Tokens.Jwt
+@using System.Text
+@using Microsoft.IdentityModel.Tokens
+@attribute [Authorize]
+@inject IJSRuntime JSRuntime
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<div class="jwt-container">
+    <h2>JWT Decoder</h2>
+
+    @if (!string.IsNullOrEmpty(jwtToken))
+    {
+        <div class="jwt-token-display">
+            <span class="token-part header">@tokenParts[0]</span>
+            <span class="token-separator">.</span>
+            <span class="token-part payload">@tokenParts[1]</span>
+            <span class="token-separator">.</span>
+            <span class="token-part signature">@tokenParts[2]</span>
+        </div>
+
+        <div class="jwt-sections">
+            <div class="jwt-section">
+                <h4>Header</h4>
+                <pre>@headerJson</pre>
+            </div>
+            <div class="jwt-section">
+                <h4>Payload</h4>
+                <pre>@payloadJson</pre>
+            </div>
+            <div class="jwt-section signature-section">
+                <h4>Signatur</h4>
+                <div class="signature-input">
+                    <input type="password" 
+                           @bind="secretKey" 
+                           placeholder="Indtast secret key for at verificere signatur..."
+                           class="form-control mb-2" />
+                    <button class="btn btn-primary" @onclick="VerifySignature">
+                        Verificer Signatur
+                    </button>
+                </div>
+                @if (signatureVerified.HasValue)
+                {
+                    <div class="signature-status @(signatureVerified.Value ? "valid" : "invalid")">
+                        <i class="bi @(signatureVerified.Value ? "bi-shield-check" : "bi-shield-x")"></i>
+                        <span>
+                            @(signatureVerified.Value ? "Signaturen er gyldig!" : "Ugyldig signatur")
+                        </span>
+                    </div>
+                }
+            </div>
+            <div class="jwt-section claims-explanation">
+                <h4>JWT Claims Forklaring</h4>
+                <div class="claims-list">
+                    <div class="claim-item">
+                        <span class="claim-name">sub (Subject)</span>
+                        <span class="claim-description">Brugerens unikke ID i systemet</span>
+                    </div>
+                    <div class="claim-item">
+                        <span class="claim-name">unique_name</span>
+                        <span class="claim-description">Brugerens brugernavn</span>
+                    </div>
+                    <div class="claim-item">
+                        <span class="claim-name">email</span>
+                        <span class="claim-description">Brugerens email-adresse</span>
+                    </div>
+                    <div class="claim-item">
+                        <span class="claim-name">role</span>
+                        <span class="claim-description">Brugerens rolle (User, Admin, Dev)</span>
+                    </div>
+                    <div class="claim-item">
+                        <span class="claim-name">firstName</span>
+                        <span class="claim-description">Brugerens fornavn</span>
+                    </div>
+                    <div class="claim-item">
+                        <span class="claim-name">lastName</span>
+                        <span class="claim-description">Brugerens efternavn</span>
+                    </div>
+                    <div class="claim-item">
+                        <span class="claim-name">isActive</span>
+                        <span class="claim-description">Om brugerkontoen er aktiv</span>
+                    </div>
+                    <div class="claim-item">
+                        <span class="claim-name">iat (Issued At)</span>
+                        <span class="claim-description">Tidspunkt hvor tokenen blev udstedt (Unix timestamp)</span>
+                    </div>
+                    <div class="claim-item">
+                        <span class="claim-name">jti (JWT ID)</span>
+                        <span class="claim-description">Unik identifikator for denne token</span>
+                    </div>
+                    <div class="claim-item">
+                        <span class="claim-name">roleId</span>
+                        <span class="claim-description">Numerisk ID for brugerens rolle (1=User, 2=Admin, 3=Dev)</span>
+                    </div>
+                    <div class="claim-item">
+                        <span class="claim-name">nbf (Not Before)</span>
+                        <span class="claim-description">Tokenen er ikke gyldig før dette tidspunkt</span>
+                    </div>
+                    <div class="claim-item">
+                        <span class="claim-name">exp (Expiration)</span>
+                        <span class="claim-description">Tidspunkt hvor tokenen udløber</span>
+                    </div>
+                    <div class="claim-item">
+                        <span class="claim-name">iss (Issuer)</span>
+                        <span class="claim-description">Udstederen af tokenen (DinPlatform)</span>
+                    </div>
+                    <div class="claim-item">
+                        <span class="claim-name">aud (Audience)</span>
+                        <span class="claim-description">Målgruppen for tokenen (DinPlatformUsers)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+
+@code {
+    private string jwtToken = "";
+    private string headerJson = "";
+    private string payloadJson = "";
+    private string[] tokenParts = new string[3];
+    private string secretKey = "";
+    private bool? signatureVerified;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GetCurrentToken();
+    }
+
+    private async Task GetCurrentToken()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        
+        if (user.Identity?.IsAuthenticated ?? false)
+        {
+            jwtToken = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "jwt_token");
+            tokenParts = jwtToken.Split('.');
+            await DecodeToken();
+        }
+    }
+
+    private async Task DecodeToken()
+    {
+        if (string.IsNullOrEmpty(jwtToken))
+            return;
+
+        if (tokenParts.Length != 3)
+            return;
+
+        try
+        {
+            // Decode header
+            var headerBytes = Convert.FromBase64String(PadBase64(tokenParts[0]));
+            headerJson = System.Text.Encoding.UTF8.GetString(headerBytes);
+            headerJson = await JSRuntime.InvokeAsync<string>("JSON.stringify", 
+                await JSRuntime.InvokeAsync<object>("JSON.parse", headerJson), null, 2);
+
+            // Decode payload
+            var payloadBytes = Convert.FromBase64String(PadBase64(tokenParts[1]));
+            payloadJson = System.Text.Encoding.UTF8.GetString(payloadBytes);
+            payloadJson = await JSRuntime.InvokeAsync<string>("JSON.stringify", 
+                await JSRuntime.InvokeAsync<object>("JSON.parse", payloadJson), null, 2);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Fejl ved dekodning af token: {ex.Message}");
+        }
+    }
+
+    private string PadBase64(string base64)
+    {
+        switch (base64.Length % 4)
+        {
+            case 2: base64 += "=="; break;
+            case 3: base64 += "="; break;
+        }
+        return base64.Replace('-', '+').Replace('_', '/');
+    }
+
+    private void VerifySignature()
+    {
+        try
+        {
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var key = Encoding.ASCII.GetBytes(secretKey);
+
+            var validationParameters = new TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(key),
+                ValidateIssuer = false,
+                ValidateAudience = false,
+                ValidateLifetime = false // Vi vil ikke validere udløb her
+            };
+
+            try
+            {
+                tokenHandler.ValidateToken(jwtToken, validationParameters, out _);
+                signatureVerified = true;
+            }
+            catch
+            {
+                signatureVerified = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Fejl ved signatur verifikation: {ex.Message}");
+            signatureVerified = false;
+        }
+    }
+}
+

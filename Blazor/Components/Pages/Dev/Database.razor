@@ -1,0 +1,99 @@
+@page "/dev/database"
+@using Blazor.Services
+@inject IJSRuntime JS
+@using Microsoft.AspNetCore.Components.Authorization
+@attribute [Authorize(Roles = "Dev")]
+
+<PageTitle>Database Schema</PageTitle>
+
+<div class="container">
+
+    <!-- ER Diagram -->
+    <div class="row">
+        <div class="col-12">
+            <h2>ER Diagram</h2>
+            <div class="mermaid">
+                @MermaidDiagram
+            </div>
+        </div>
+    </div>
+
+    <!-- Database Schema Tabel -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>Database Schema</h2>
+            <button class="btn btn-primary mb-3" @onclick="InsertDummyData">Indsæt Test Data</button>
+            @if (DBSchema != null)
+            {
+                @foreach (var table in DBSchema)
+                {
+                    <div class="table-info">
+                        <h3>@table.Key</h3>
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Kolonne</th>
+                                    <th>Type</th>
+                                    <th>PK</th>
+                                    <th>FK</th>
+                                    <th>Referencer</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var column in table.Value)
+                                {
+                                    <tr>
+                                        <td>@column.ColumnName</td>
+                                        <td>@column.DataType</td>
+                                        <td>@(column.IsPrimaryKey ? "✓" : "")</td>
+                                        <td>@(column.IsForeignKey ? "✓" : "")</td>
+                                        <td>
+                                            @if (column.IsForeignKey)
+                                            {
+                                                @($"{column.ReferencedTable}.{column.ReferencedColumn}")
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    
+</div>
+
+@code {
+    private Dictionary<string, List<DBService.ColumnInfo>>? DBSchema;
+    private string MermaidDiagram = string.Empty;
+    [Inject] private DBService DbService { get; set; } = default!;
+
+    private async Task InsertDummyData()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("alert", "Denne metode er ikke implementeret endnu.");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Fejl ved indsættelse af dummy data: {ex.Message}");
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        DBSchema = DBService.GetDatabaseSchema();
+        MermaidDiagram = DBService.GenerateMermaidERDiagram();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("initMermaid");
+        }
+    }
+}   

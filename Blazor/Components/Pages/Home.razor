@@ -1,0 +1,28 @@
+﻿@page "/"
+
+<PageTitle>Home</PageTitle>
+
+<h1>Velkommen til H1 ved MAGS</h1>
+
+<div class="database-container">
+    <h2>Database Status</h2>
+    @if (DBService != null)
+    { 
+        @if (DBService.GetAllTables().Count > 0){
+            @foreach (var table in DBService.GetAllTables())
+            {
+                <p>@table</p>
+            }
+        } else {
+            <p> Der er ingen tabeller i databasen</p>
+        }
+    }
+    else
+    {
+        <p class="error-message">Der er ikke oprettet en forbindelse til databasen</p>
+    }
+</div>
+
+@code {
+
+}   

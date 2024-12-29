@@ -1,0 +1,350 @@
+@page "/admin/users"
+@using System.ComponentModel
+@using Microsoft.AspNetCore.Components.Authorization
+@attribute [Authorize(Roles = "Dev, Admin")]
+
+
+@inject IJSRuntime JSRuntime
+
+
+        <h1>Brugere Admin Board</h1>
+
+        <div class="mb-3">
+            <button class="btn btn-primary me-2" @onclick="GetAllUsers">
+                <i class="fas fa-sync-alt"></i> Opdater Liste
+            </button>
+            <button class="btn btn-success" @onclick="CreateNewUser">
+                <i class="fas fa-user-plus"></i> Opret Ny Bruger
+            </button>
+        </div>
+
+        <Grid TItem="User"
+              Class="table table-hover table-bordered table-striped"
+              DataProvider="UsersDataProvider"
+              AllowFiltering="true"
+              Responsive="true">
+            <GridColumns>
+                <GridColumn TItem="User" HeaderText="Brugernavn" PropertyName="Username">
+                    @context.Username
+                </GridColumn>
+                <GridColumn TItem="User" HeaderText="Email" PropertyName="Email">
+                    @context.Email
+                </GridColumn>
+                <GridColumn TItem="User" HeaderText="Fornavn" PropertyName="FirstName">
+                    @context.FirstName
+                </GridColumn>
+                <GridColumn TItem="User" HeaderText="Efternavn" PropertyName="LastName">
+                    @context.LastName
+                </GridColumn>
+                <GridColumn TItem="User" HeaderText="Sidst Logget Ind" PropertyName="LastLogin">
+                    @(context.LastLogin?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "-")
+                </GridColumn>
+                <GridColumn TItem="User" HeaderText="Status" PropertyName="IsActive">
+                    <span class="badge @(context.IsActive ? "bg-success" : "bg-danger")">
+                        @(context.IsActive ? "Aktiv" : "Inaktiv")
+                    </span>
+                </GridColumn>
+                <GridColumn TItem="User" HeaderText="Rolle" PropertyName="Role">
+                    @(context.GetRoleName())
+                </GridColumn>
+                <GridColumn TItem="User" HeaderText="Handlinger">
+                    <button class="btn btn-link" @onclick="() => EditUser(context)" title="Rediger">
+                        <i class="fas fa-edit text-warning"></i>
+                    </button>
+                    <button class="btn btn-link" @onclick="() => DeleteUser(context.Id)" title="Slet">
+                        <i class="fas fa-trash-alt text-danger"></i>
+                    </button>
+                </GridColumn>
+            </GridColumns>
+        </Grid>
+
+        @if (editingUser != null)
+        {
+            <div class="modal" tabindex="-1" style="display: block">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">@(string.IsNullOrEmpty(editingUser.Id) ? "Opret Bruger" : "Rediger Bruger")</h5>
+                            <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <EditForm Model="@editingUser" OnValidSubmit="SaveUser">
+                                <DataAnnotationsValidator />
+                                <ValidationSummary />
+
+                                <div class="form-group mb-3">
+                                    <label>Brugernavn</label>
+                                    <InputText class="form-control" @bind-Value="editingUser.Username" />
+                                    <ValidationMessage For="@(() => editingUser.Username)" />
+                                </div>
+
+                                <div class="form-group mb-3">
+                                    <label>Email</label>
+                                    <InputText class="form-control" @bind-Value="editingUser.Email" type="email" />
+                                    <ValidationMessage For="@(() => editingUser.Email)" />
+                                </div>
+
+                                <div class="form-group mb-3">
+                                    <label>Fornavn</label>
+                                    <InputText class="form-control" @bind-Value="editingUser.FirstName" />
+                                    <ValidationMessage For="@(() => editingUser.FirstName)" />
+                                </div>
+
+                                <div class="form-group mb-3">
+                                    <label>Efternavn</label>
+                                    <InputText class="form-control" @bind-Value="editingUser.LastName" />
+                                    <ValidationMessage For="@(() => editingUser.LastName)" />
+                                </div>
+
+                                <div class="form-group mb-3">   
+                                    <label>Rolle</label>
+                                    <InputSelect class="form-control" @bind-Value="editingUser.RoleId">
+                                        @foreach (var role in Enum.GetValues<Role>())
+                                        {
+                                            <option value="@((int)role)">@role.ToString()</option>
+                                        }
+                                    </InputSelect>
+                                    <small class="form-text text-muted">
+                                        User: Almindelig bruger
+                                        Admin: Administrator med fuld adgang
+                                        Dev: Udvikler med udvidede rettigheder
+                                    </small>
+                                </div>
+
+                                <div class="form-group mb-3">
+                                    <label>
+                                        <InputCheckbox @bind-Value="editingUser.IsActive" />
+                                        Aktiv
+                                    </label>
+                                </div>
+
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">Annuller</button>
+                                    <button type="submit" class="btn btn-primary">Gem</button>
+                                </div>
+                            </EditForm>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-backdrop fade show"></div>
+        }
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                @errorMessage
+                <button type="button" class="btn-close" @onclick="() => errorMessage = null" aria-label="Close"></button>
+            </div>
+        }
+
+@code {
+    private List<User> users = new List<User>();
+    private List<User> sortedUsers => SortUsers(users);
+    private User? editingUser;
+    private string? errorMessage;
+    private string currentSortColumn = nameof(User.Username);
+    private ListSortDirection currentSortDirection = ListSortDirection.Ascending;
+    private Dictionary<int, string> RoleDescriptions = new()
+    {
+        { 1, "Almindelig bruger" },
+        { 2, "Administrator med fuld adgang" },
+        { 3, "Udvikler med udvidede rettigheder" }
+    };
+
+    private List<User> SortUsers(List<User> usersToSort)
+    {
+        return currentSortColumn switch
+        {
+            nameof(User.Username) => SortList(usersToSort, u => u.Username),
+            nameof(User.Email) => SortList(usersToSort, u => u.Email),
+            nameof(User.FirstName) => SortList(usersToSort, u => u.FirstName ?? string.Empty),
+            nameof(User.LastName) => SortList(usersToSort, u => u.LastName ?? string.Empty),
+            nameof(User.LastLogin) => SortList(usersToSort, u => u.LastLogin ?? DateTime.MinValue),
+            nameof(User.IsActive) => SortList(usersToSort, u => u.IsActive),
+            nameof(User.RoleId) => SortList(usersToSort, u => u.RoleId),
+            _ => usersToSort
+        };
+    }
+
+    private List<User> SortList<T>(List<User> list, Func<User, T> keySelector)
+    {
+        return currentSortDirection == ListSortDirection.Ascending
+            ? list.OrderBy(keySelector).ToList()
+            : list.OrderByDescending(keySelector).ToList();
+    }
+
+    private void SortTable(string columnName)
+    {
+        if (columnName == currentSortColumn)
+        {
+            currentSortDirection = currentSortDirection == ListSortDirection.Ascending
+                ? ListSortDirection.Descending
+                : ListSortDirection.Ascending;
+        }
+        else
+        {
+            currentSortColumn = columnName;
+            currentSortDirection = ListSortDirection.Ascending;
+        }
+    }
+
+    private RenderFragment GetSortIcon(string columnName)
+    {
+        if (columnName != currentSortColumn)
+            return @<i class="fas fa-sort text-muted"></i>;
+
+        return currentSortDirection == ListSortDirection.Ascending
+            ? @<i class="fas fa-sort-up"></i>
+            : @<i class="fas fa-sort-down"></i>;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            users = await DBService.GetAllUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Fejl i OnInitializedAsync: {ex.Message}");
+            users = new List<User>();
+        }
+    }
+
+    private void CreateNewUser()
+    {
+        editingUser = new User
+        {
+            Id = string.Empty,
+            Username = string.Empty,
+            Email = string.Empty,
+            FirstName = string.Empty,
+            LastName = string.Empty,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Cisco123!"),
+            Role = Role.User,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            LastLogin = DateTime.UtcNow,
+            IsActive = true
+        };
+    }
+
+    private void EditUser(User user)
+    {
+        editingUser = new User
+        {
+            Id = user.Id,
+            Username = user.Username,
+            Email = user.Email,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            PasswordHash = user.PasswordHash,
+            CreatedAt = user.CreatedAt,
+            UpdatedAt = DateTime.UtcNow,
+            LastLogin = user.LastLogin,
+            IsActive = user.IsActive
+        };
+    }
+
+    private async Task SaveUser()
+    {
+        if (editingUser != null)
+        {
+            try
+            {
+                editingUser.UpdatedAt = DateTime.UtcNow;
+
+                if (string.IsNullOrEmpty(editingUser.Id))
+                {
+                    editingUser.Id = Guid.NewGuid().ToString();
+                    editingUser.CreatedAt = DateTime.UtcNow;
+                    await DBService.PostUserAsync(editingUser);
+                }
+                else
+                {
+                    await DBService.PutUserAsync(editingUser);
+                }
+                
+                CloseModal();
+                await GetAllUsers();
+                await InvokeAsync(() => StateHasChanged());
+            }
+            catch (Npgsql.PostgresException ex)
+            {
+                errorMessage = ex.SqlState switch
+                {
+                    "23505" when ex.Message.Contains("User_username_key") => 
+                        "Dette brugernavn er allerede i brug. Vælg venligst et andet.",
+                    "23505" when ex.Message.Contains("User_email_key") => 
+                        "Denne email er allerede i brug. Vælg venligst en anden.",
+                    "23514" when ex.Message.Contains("username_format") => 
+                        "Brugernavnet skal være mindst 3 tegn langt.",
+                    "23514" when ex.Message.Contains("email_format") => 
+                        "Indtast venligst en gyldig email-adresse.",
+                    _ => $"Der opstod en fejl: {ex.Message}"
+                };
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Der opstod en uventet fejl: {ex.Message}";
+            }
+        }
+    }
+
+    private async Task GetAllUsers()
+    {
+        try
+        {
+            users = await DBService.GetAllUsersAsync();
+            errorMessage = null; // Nulstil fejlbesked ved succesfuld hentning
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Fejl i GetAllUsers: {ex.Message}");
+            errorMessage = "Kunne ikke hente brugerlisten. Prøv venligst igen.";
+            users = new List<User>();
+        }
+    }
+
+    private async Task DeleteUser(string id)
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Er du sikker på, at du vil slette denne bruger?"))
+            return;
+
+        try
+        {
+            await DBService.DeleteUserAsync(id);
+            await GetAllUsers();
+            await InvokeAsync(() => StateHasChanged());
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Fejl i DeleteUser: {ex.Message}");
+            errorMessage = $"Der opstod en fejl ved sletning af brugeren: {ex.Message}";
+        }
+    }
+
+    private void CloseModal()
+    {
+        editingUser = null;
+    }
+
+    private async Task<GridDataProviderResult<User>> UsersDataProvider(GridDataProviderRequest<User> request)
+    {
+        if (!users.Any())
+        {
+            users = await DBService.GetAllUsersAsync();
+            StateHasChanged();
+        }
+        return await Task.FromResult(request.ApplyTo(users));
+    }
+
+    private string GetRoleDescription(int roleId)
+    {
+        return RoleDescriptions.TryGetValue(roleId, out var description) 
+            ? description 
+            : "Ukendt rolle";
+    }
+}

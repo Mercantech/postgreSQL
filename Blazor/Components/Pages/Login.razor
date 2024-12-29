@@ -1,0 +1,160 @@
+@page "/login"
+@using System.ComponentModel.DataAnnotations
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@inject DBService DBService
+@inject JWTService JWTService
+@inject ProtectedSessionStorage SessionStorage
+
+<div class="login-container">
+    <div class="login-box">
+        <h3 class="mb-4">Login</h3>
+        
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger">@errorMessage</div>
+        }
+        @if (!showRegister)
+        {
+            <EditForm Model="@loginModel" OnValidSubmit="HandleLogin">
+                <DataAnnotationsValidator />
+                
+            <div class="mb-3">
+                <label for="username">Brugernavn</label>
+                <InputText id="username" class="form-control" @bind-Value="loginModel.Username" />
+                <ValidationMessage For="@(() => loginModel.Username)" />
+            </div>
+
+            <div class="mb-3">
+                <label for="password">Adgangskode</label>
+                <InputText type="password" id="password" class="form-control" @bind-Value="loginModel.Password" />
+                <ValidationMessage For="@(() => loginModel.Password)" />
+            </div>
+
+                <button type="submit" class="btn btn-primary w-100">Login</button>
+            </EditForm>
+        }
+
+        <div class="mt-3 text-center">
+            <button class="btn btn-link" @onclick="ToggleRegister">
+                @(showRegister ? "Tilbage til login" : "Opret ny bruger")
+            </button>
+        </div>
+
+        @if (showRegister)
+        {
+            <EditForm Model="@registerModel" OnValidSubmit="HandleRegister">
+                <DataAnnotationsValidator />
+                
+                <div class="mb-3">
+                    <label for="reg-username">Brugernavn</label>
+                    <InputText id="reg-username" class="form-control" @bind-Value="registerModel.Username" />
+                    <ValidationMessage For="@(() => registerModel.Username)" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="reg-email">Email</label>
+                    <InputText id="reg-email" class="form-control" @bind-Value="registerModel.Email" />
+                    <ValidationMessage For="@(() => registerModel.Email)" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="reg-password">Adgangskode</label>
+                    <InputText type="password" id="reg-password" class="form-control" @bind-Value="registerModel.Password" />
+                    <ValidationMessage For="@(() => registerModel.Password)" />
+                </div>
+
+                <button type="submit" class="btn btn-success w-100">Opret bruger</button>
+            </EditForm>
+        }
+    </div>
+</div>
+
+@code {
+    private LoginModel loginModel = new();
+    private RegisterModel registerModel = new();
+    private bool showRegister = false;
+    private string? errorMessage;
+
+    private string NormalizeUsername(string username)
+    {
+        return username?.Trim().ToLower() ?? "";
+    }
+
+    private async Task HandleLogin()
+    {
+        try
+        {
+            var normalizedUsername = NormalizeUsername(loginModel.Username);
+            var user = await DBService.AuthenticateUserAsync(normalizedUsername, loginModel.Password);
+            if (user != null)
+            {
+                var token = JWTService.GenerateToken(user);
+                await SessionStorage.SetAsync("token", token);
+                await SessionStorage.SetAsync("user_id", user.Id);
+                // Navigate to the home page and refresh the page
+                NavigationManager.NavigateTo("/", true);
+            }
+            else
+            {
+                errorMessage = "Ugyldigt brugernavn eller adgangskode";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Der opstod en fejl under login " + ex.Message;
+        }
+    }
+
+    private async Task HandleRegister()
+    {
+        try
+        {
+            var newUser = new User
+            {
+                Username = NormalizeUsername(registerModel.Username),
+                Email = registerModel.Email.Trim(),
+                PasswordHash = registerModel.Password // Dette vil blive hashet i DBService
+            };
+
+            await DBService.PostUserAsync(newUser);
+            showRegister = false;
+            errorMessage = null;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Der opstod en fejl under oprettelsen af brugeren " + ex.Message;
+        }
+    }
+
+    private void ToggleRegister()
+    {
+        showRegister = !showRegister;
+        errorMessage = null;
+    }
+
+    public class LoginModel
+    {
+        [Required(ErrorMessage = "Brugernavn er påkrævet")]
+        public string Username { get; set; } = "";
+
+        [Required(ErrorMessage = "Adgangskode er påkrævet")]
+        public string Password { get; set; } = "";
+    }
+
+    public class RegisterModel
+    {
+        [Required(ErrorMessage = "Brugernavn er påkrævet")]
+        [MinLength(3, ErrorMessage = "Brugernavn skal være mindst 3 tegn")]
+        public string Username { get; set; } = "";
+
+        [Required(ErrorMessage = "Email er påkrævet")]
+        [EmailAddress(ErrorMessage = "Ugyldig email-adresse")]
+        public string Email { get; set; } = "";
+
+        [Required(ErrorMessage = "Adgangskode er påkrævet")]
+        [MinLength(6, ErrorMessage = "Adgangskode skal være mindst 6 tegn")]
+        public string Password { get; set; } = "";
+    }
+}
+

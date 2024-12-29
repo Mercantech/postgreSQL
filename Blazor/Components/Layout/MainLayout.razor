@@ -1,0 +1,178 @@
+﻿@inherits LayoutComponentBase
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@inject JWTService JWTService
+@inject ProtectedSessionStorage SessionStorage
+
+
+<div class="bb-page">
+    <Sidebar @ref="sidebar"
+             IconName="IconName.HouseDoorFill"
+             Title="H1 - Markedsplads"
+             DataProvider="SidebarDataProvider" />
+
+    <main>
+        <div class="bb-top-row px-4 d-flex justify-content-between">
+            <div class="d-flex">
+                <ThemeSwitcher />
+                <a href="https://mercantec.notion.site/h1" target="_blank" class="ms-3">
+                    <img src="https://pub-3994a1873a2b4964acd0e1bd1eed75aa.r2.dev/notion.png" alt="Notion Logo" class="logo">
+                </a>
+            </div>
+            <div>
+                @if (isAuthenticated)
+                {
+                    <button class="logout-button" @onclick="Logout">
+                        <i class="bi bi-box-arrow-right"></i>
+                        Log ud
+                    </button>
+                }
+            </div>
+        </div>
+
+        <article class="content px-4">
+            <div class="py-2">@Body</div>
+        </article>
+    </main>
+</div>
+
+@code {
+    private Sidebar sidebar;
+    private IEnumerable<NavItem> navItems;
+    private bool isAuthenticated;
+    private Role userRole = Role.User;
+    private bool isLoaded;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await CheckAuthenticationStatus();
+            isLoaded = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CheckAuthenticationStatus()
+    {
+        try 
+        {
+            var tokenResult = await SessionStorage.GetAsync<string>("token");
+            isAuthenticated = tokenResult.Success && !string.IsNullOrEmpty(tokenResult.Value) 
+                && !JWTService.IsTokenExpired(tokenResult.Value);
+
+            if (isAuthenticated)
+            {
+                userRole = JWTService.GetUserRoleEnum(tokenResult.Value);
+                navItems = GetNavItems();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error checking auth status: {ex.Message}");
+            isAuthenticated = false;
+            userRole = Role.User;
+        }
+    }
+
+    private async Task<SidebarDataProviderResult> SidebarDataProvider(SidebarDataProviderRequest request)
+    {
+        if (navItems is null)
+            navItems = GetNavItems();
+
+        return await Task.FromResult(request.ApplyTo(navItems));
+    }
+
+    private IEnumerable<NavItem> GetNavItems()
+    {
+        var items = new List<NavItem>
+        {
+            new NavItem { Href = "/", IconName = IconName.HouseDoorFill, Text = "Home" }
+        };
+
+        if (!isAuthenticated)
+        {
+            items.Add(new NavItem { Href = "/login", IconName = IconName.PersonFill, Text = "Login" });
+        }
+        else
+        {
+            // Basis menu for alle logget ind brugere
+            items.Add(new NavItem { Href = "/profile", IconName = IconName.PersonCircle, Text = "Min Profil" });
+            items.Add(new NavItem { Href = "/messages", IconName = IconName.Envelope, Text = "Beskeder" });
+
+            // Admin menu
+            if (userRole == Role.Admin || userRole == Role.Dev)
+            {
+                items.Add(new NavItem 
+                { 
+                    Id = "1", 
+                    IconName = IconName.GearFill, 
+                    Text = "Administration" 
+                });
+                items.Add(new NavItem 
+                { 
+                    Href = "Admin/users", 
+                    IconName = IconName.PeopleFill, 
+                    Text = "Brugere", 
+                    ParentId = "1" 
+                });
+                items.Add(new NavItem 
+                { 
+                    Href = "Admin/roles", 
+                    IconName = IconName.ShieldFill, 
+                    Text = "Roller", 
+                    ParentId = "1" 
+                });
+            }
+
+            // Developer menu
+            if (userRole == Role.Dev)
+            {
+                items.Add(new NavItem 
+                { 
+                    Id = "2", 
+                    IconName = IconName.Tools, 
+                    Text = "Udvikler" 
+                });
+                items.Add(new NavItem 
+                { 
+                    Href = "Dev/database", 
+                    IconName = IconName.Database, 
+                    Text = "Database", 
+                    ParentId = "2" 
+                });
+                items.Add(new NavItem 
+                { 
+                    Href = "Dev/jwt", 
+                    IconName = IconName.Key, 
+                    Text = "JWT", 
+                    ParentId = "2" 
+                });
+                items.Add(new NavItem 
+                { 
+                    Href = "Dev/logs", 
+                    IconName = IconName.JournalText, 
+                    Text = "Logs", 
+                    ParentId = "2" 
+                });
+            }
+        }
+
+        return items;
+    }
+
+    private async Task Logout()
+    {
+        await SessionStorage.DeleteAsync("token");
+        await SessionStorage.DeleteAsync("user_id");
+        isAuthenticated = false;
+        navItems = GetNavItems();
+        NavigationManager.NavigateTo("/login", true);
+    }
+}
+
+<div id="blazor-error-ui">
+    An unhandled error has occurred.
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>
